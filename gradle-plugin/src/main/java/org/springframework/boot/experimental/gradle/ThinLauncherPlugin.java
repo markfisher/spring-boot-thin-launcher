@@ -21,10 +21,13 @@ import java.io.File;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.Task;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginConvention;
+import org.gradle.api.tasks.Copy;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskContainer;
+import org.gradle.api.tasks.bundling.Jar;
 
 /**
  * Gradle {@link Plugin} for Spring Boot's thin launcher.
@@ -44,9 +47,36 @@ public class ThinLauncherPlugin implements Plugin<Project> {
 			@Override
 			public void execute(JavaPlugin plugin) {
 				createLibPropertiesTask(target);
+				target.getTasks().create("thinResolve", ThinResolveTask.class);
 			}
 
 		});
+		target.getTasks().withType(Jar.class, new Action<Jar>() {
+
+			@Override
+			public void execute(Jar jar) {
+				createCopyTask(target, jar);
+			}
+			
+		});
+	}
+
+	protected void createCopyTask(Project target, Jar jar) {
+		Copy copy = target.getTasks().create("thinResolvePrepare", Copy.class);
+		copy.dependsOn("bootRepackage");
+		copy.from(jar.getArchivePath().getParentFile());
+		copy.into(new File(target.getBuildDir(), "thin/root"));
+		copy.include(jar.getArchiveName());
+		System.err.println("*** " + jar.getArchivePath());
+	}
+
+	private Jar findJarTask(Project project) {
+		Task task = project.getTasks().findByName("jar");
+		if (task instanceof Jar) {
+			return (Jar) task;
+		}
+		throw new IllegalStateException(
+				"Cannot find jar task. Is this really a spring boot project?");
 	}
 
 	private void createLibPropertiesTask(final Project project) {
